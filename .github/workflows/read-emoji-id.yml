@@ -1,0 +1,49 @@
+name: Read Telegram emoji ID
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-emoji-id:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract custom emoji ID from the latest bot updates
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+            echo "Secret TELEGRAM_BOT_TOKEN is missing." >&2
+            exit 1
+          fi
+
+          response="$(curl --fail --silent --show-error \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates")"
+
+          if [[ "$(jq -r '.ok' <<< "${response}")" != "true" ]]; then
+            jq -r '.description // "Telegram API request failed."' <<< "${response}" >&2
+            exit 1
+          fi
+
+          custom_emoji_id="$(
+            jq -r '
+              ..
+              | objects
+              | select(.type? == "custom_emoji")
+              | .custom_emoji_id // empty
+            ' <<< "${response}" | tail -n 1
+          )"
+
+          if [[ -z "${custom_emoji_id}" ]]; then
+            echo "Custom emoji not found. Send it to the bot again and rerun this workflow." >&2
+            exit 1
+          fi
+
+          echo "### Telegram custom emoji" >> "${GITHUB_STEP_SUMMARY}"
+          echo "\`${custom_emoji_id}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "CUSTOM_EMOJI_ID=${custom_emoji_id}"

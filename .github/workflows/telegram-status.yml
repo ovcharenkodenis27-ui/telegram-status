@@ -6,6 +6,7 @@ on:
       timezone: "Europe/Moscow"
     - cron: "0 16 * * 1-5"
       timezone: "Europe/Moscow"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       status:
@@ -19,6 +20,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: telegram-emoji-status
+  cancel-in-progress: true
 
 jobs:
   update-status:
@@ -54,6 +59,19 @@ jobs:
             selected_status="work"
           elif [[ "${EVENT_SCHEDULE}" == "0 16 * * 1-5" ]]; then
             selected_status="unavailable"
+          elif [[ "${EVENT_NAME}" == "schedule" ]]; then
+            day_of_week="$(TZ=Europe/Moscow date +%u)"
+            current_hour="$(TZ=Europe/Moscow date +%H)"
+            current_minute="$(TZ=Europe/Moscow date +%M)"
+            minutes_since_midnight=$((10#${current_hour} * 60 + 10#${current_minute}))
+
+            if (( day_of_week <= 5 \
+              && minutes_since_midnight >= 420 \
+              && minutes_since_midnight < 960 )); then
+              selected_status="work"
+            else
+              selected_status="unavailable"
+            fi
           else
             echo "Unknown workflow trigger." >&2
             exit 1
